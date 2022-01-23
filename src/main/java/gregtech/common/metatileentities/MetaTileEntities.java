@@ -806,6 +806,6 @@ public class MetaTileEntities {
     }
 
     public static boolean getHighTier(String key) {
-        return HIGH_TIER.getOrDefault(key, false);
+        return HIGH_TIER.getOrDefault(key, GTValues.HT);
     }
 }
