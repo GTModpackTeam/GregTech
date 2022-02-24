@@ -1,6 +1,14 @@
 package gregtech.api.metatileentity;
 
+import appeng.api.networking.IGridNode;
+import appeng.api.networking.security.IActionHost;
+import appeng.api.util.AECableType;
+import appeng.api.util.AEPartLocation;
+import appeng.api.util.DimensionalCoord;
+import appeng.me.helpers.AENetworkProxy;
+import appeng.me.helpers.IGridProxyable;
 import com.google.common.base.Preconditions;
+import gregtech.api.GTValues;
 import gregtech.api.GregTechAPI;
 import gregtech.api.block.machines.BlockMachine;
 import gregtech.api.cover.CoverBehavior;
@@ -9,7 +17,6 @@ import gregtech.api.net.NetworkHandler;
 import gregtech.api.net.packets.CPacketRecoverMTE;
 import gregtech.api.util.GTLog;
 import gregtech.api.util.GTUtility;
-import gregtech.api.util.TaskScheduler;
 import gregtech.client.particle.GTNameTagParticle;
 import gregtech.client.particle.GTParticleManager;
 import net.minecraft.block.state.IBlockState;
@@ -31,6 +38,8 @@ import net.minecraft.world.IWorldNameable;
 import net.minecraft.world.World;
 import net.minecraftforge.common.capabilities.Capability;
 import net.minecraftforge.common.util.Constants.NBT;
+import net.minecraftforge.fml.common.Loader;
+import net.minecraftforge.fml.common.Optional.*;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
@@ -40,7 +49,11 @@ import java.util.ArrayList;
 
 import static gregtech.api.capability.GregtechDataCodes.INITIALIZE_MTE;
 
-public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIHolder, IWorldNameable {
+@InterfaceList(value = {
+        @Interface(iface = "appeng.api.networking.security.IActionHost", modid = GTValues.MODID_APPENG, striprefs = true),
+        @Interface(iface = "appeng.me.helpers.IGridProxyable", modid = GTValues.MODID_APPENG, striprefs = true),
+})
+public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIHolder, IWorldNameable, IActionHost, IGridProxyable {
 
     MetaTileEntity metaTileEntity;
     private boolean needToUpdateLightning = false;
@@ -117,6 +130,9 @@ public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIH
             } else {
                 GTLog.logger.error("Failed to load MetaTileEntity with invalid ID " + metaTileEntityIdRaw);
             }
+            if (Loader.isModLoaded(GTValues.MODID_APPENG)) {
+                readFromNBT_AENetwork(compound);
+            }
         }
     }
 
@@ -130,6 +146,9 @@ public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIH
             NBTTagCompound metaTileEntityData = new NBTTagCompound();
             metaTileEntity.writeToNBT(metaTileEntityData);
             compound.setTag("MetaTileEntity", metaTileEntityData);
+            if (Loader.isModLoaded(GTValues.MODID_APPENG)) {
+                writeToNBT_AENetwork(compound);
+            }
         }
         return compound;
     }
@@ -140,6 +159,9 @@ public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIH
             metaTileEntity.invalidate();
         }
         super.invalidate();
+        if (Loader.isModLoaded(GTValues.MODID_APPENG)) {
+            invalidateAE();
+        }
     }
 
     @Override
@@ -308,6 +330,9 @@ public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIH
         if (metaTileEntity != null) {
             metaTileEntity.onUnload();
         }
+        if (Loader.isModLoaded(GTValues.MODID_APPENG)) {
+            onChunkUnloadAE();
+        }
     }
 
     @Override
@@ -418,5 +443,84 @@ public class MetaTileEntityHolder extends TickableTileEntityBase implements IUIH
     @Override
     public ITextComponent getDisplayName() {
         return this.hasCustomName() ? new TextComponentString(this.getName()) : metaTileEntity != null ? new TextComponentTranslation(metaTileEntity.getMetaFullName()) : new TextComponentString(this.getName());
+    }
+
+    @Nullable
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public IGridNode getGridNode(@Nonnull AEPartLocation part) {
+        AENetworkProxy proxy = getProxy();
+        return proxy == null ? null : proxy.getNode();
+    }
+
+    @Nonnull
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public AECableType getCableConnectionType(@Nonnull AEPartLocation part) {
+        return metaTileEntity == null ? AECableType.NONE : metaTileEntity.getCableConnectionType(part);
+    }
+
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public void securityBreak() {}
+
+    @Nonnull
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public IGridNode getActionableNode() {
+        AENetworkProxy proxy = getProxy();
+        return proxy == null ? null : proxy.getNode();
+    }
+
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public AENetworkProxy getProxy() {
+        return metaTileEntity == null ? null : metaTileEntity.getProxy();
+    }
+
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public DimensionalCoord getLocation() {
+        return new DimensionalCoord(this);
+    }
+
+    @Override
+    @Method(modid = GTValues.MODID_APPENG)
+    public void gridChanged() {
+        if (metaTileEntity != null) {
+            metaTileEntity.gridChanged();
+        }
+    }
+
+    @Method(modid = GTValues.MODID_APPENG)
+    public void readFromNBT_AENetwork(NBTTagCompound data) {
+        AENetworkProxy proxy = getProxy();
+        if (proxy != null) {
+            proxy.readFromNBT(data);
+        }
+    }
+
+    @Method(modid = GTValues.MODID_APPENG)
+    public void writeToNBT_AENetwork(NBTTagCompound data) {
+        AENetworkProxy proxy = getProxy();
+        if (proxy != null) {
+            proxy.writeToNBT(data);
+        }
+    }
+
+    @Method(modid = GTValues.MODID_APPENG)
+    void onChunkUnloadAE() {
+        AENetworkProxy proxy = getProxy();
+        if (proxy != null) {
+            proxy.onChunkUnload();
+        }
+    }
+
+    @Method(modid = GTValues.MODID_APPENG)
+    void invalidateAE() {
+        AENetworkProxy proxy = getProxy();
+        if (proxy != null) {
+            proxy.invalidate();
+        }
     }
 }

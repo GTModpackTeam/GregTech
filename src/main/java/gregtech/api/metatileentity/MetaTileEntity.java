@@ -1,5 +1,8 @@
 package gregtech.api.metatileentity;
 
+import appeng.api.util.AECableType;
+import appeng.api.util.AEPartLocation;
+import appeng.me.helpers.AENetworkProxy;
 import codechicken.lib.raytracer.CuboidRayTraceResult;
 import codechicken.lib.raytracer.IndexedCuboid6;
 import codechicken.lib.render.CCRenderState;
@@ -9,6 +12,7 @@ import codechicken.lib.texture.TextureUtils;
 import codechicken.lib.vec.Cuboid6;
 import codechicken.lib.vec.Matrix4;
 import com.google.common.base.Preconditions;
+import gregtech.api.GTValues;
 import gregtech.api.GregTechAPI;
 import gregtech.api.block.machines.BlockMachine;
 import gregtech.api.capability.GregtechTileCapabilities;
@@ -29,7 +33,6 @@ import gregtech.common.ConfigHolder;
 import gregtech.common.advancement.GTTriggers;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.BlockFaceShape;
-import net.minecraft.client.audio.ISound;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.entity.player.EntityPlayer;
@@ -52,12 +55,14 @@ import net.minecraftforge.fluids.FluidTank;
 import net.minecraftforge.fluids.FluidUtil;
 import net.minecraftforge.fluids.capability.CapabilityFluidHandler;
 import net.minecraftforge.fluids.capability.IFluidHandler;
+import net.minecraftforge.fml.common.Optional.Method;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import net.minecraftforge.items.*;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
+import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -1422,5 +1427,21 @@ public abstract class MetaTileEntity implements ICoverable {
 
     public boolean doTickProfileMessage() {
         return true;
+    }
+
+    @Nonnull
+    @Method(modid = GTValues.MODID_APPENG)
+    public AECableType getCableConnectionType(@Nonnull AEPartLocation part) {
+        return AECableType.NONE;
+    }
+
+    @Nullable
+    @Method(modid = GTValues.MODID_APPENG)
+    public AENetworkProxy getProxy() {
+        return null;
+    }
+
+    @Method(modid = GTValues.MODID_APPENG)
+    public void gridChanged() {
     }
 }
