@@ -5,7 +5,6 @@ import gregtech.api.capability.GregtechDataCodes;
 import gregtech.api.capability.GregtechTileCapabilities;
 import gregtech.api.capability.IMultipleTankHandler;
 import gregtech.api.capability.IWorkable;
-import gregtech.api.metatileentity.IVoidable;
 import gregtech.api.metatileentity.MTETrait;
 import gregtech.api.metatileentity.MetaTileEntity;
 import gregtech.api.metatileentity.multiblock.ParallelLogicType;
@@ -16,7 +15,6 @@ import gregtech.api.recipes.logic.IParallelableRecipeLogic;
 import gregtech.api.recipes.recipeproperties.RecipePropertyStorage;
 import gregtech.api.util.GTTransferUtils;
 import gregtech.api.util.GTUtility;
-import gregtech.api.util.ItemStackHashStrategy;
 import gregtech.common.ConfigHolder;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
@@ -33,7 +31,6 @@ import net.minecraftforge.items.IItemHandlerModifiable;
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public abstract class AbstractRecipeLogic extends MTETrait implements IWorkable, IParallelableRecipeLogic {
 
@@ -258,21 +255,6 @@ public abstract class AbstractRecipeLogic extends MTETrait implements IWorkable,
         trySearchNewRecipe();
     }
 
-    /**
-     * should limit the recipe output only to the first output
-     *
-     * @return true if only the first output should be considered
-     */
-    public boolean trimOutputs() {
-        return false;
-    }
-
-    public boolean canVoidRecipeOutputs() {
-        if (metaTileEntity instanceof IVoidable)
-            return ((IVoidable) metaTileEntity).canVoidRecipeOutputs();
-        return false;
-    }
-
     protected void trySearchNewRecipe() {
         long maxVoltage = getMaxVoltage();
         Recipe currentRecipe;
@@ -331,6 +313,10 @@ public abstract class AbstractRecipeLogic extends MTETrait implements IWorkable,
      * @return true if the recipe was successfully prepared, else false
      */
     protected boolean prepareRecipe(Recipe recipe) {
+
+        recipe = recipe.trimRecipeOutputs(recipe, getRecipeMap(), metaTileEntity.getItemOutputLimit(), metaTileEntity.getFluidOutputLimit());
+
+        // Pass in the trimmed recipe to the parallel logic
         recipe = findParallelRecipe(
                 this,
                 recipe,
@@ -347,7 +333,6 @@ public abstract class AbstractRecipeLogic extends MTETrait implements IWorkable,
         }
         return false;
     }
-
 
     /**
      * DO NOT use the parallelLimit field directly, EVER
@@ -417,12 +402,19 @@ public abstract class AbstractRecipeLogic extends MTETrait implements IWorkable,
         IMultipleTankHandler importFluids = getInputTank();
         IMultipleTankHandler exportFluids = getOutputTank();
 
-        if (!canVoidRecipeOutputs() &&
-                (!GTTransferUtils.addItemsToItemHandler(exportInventory, true, recipe.getAllItemOutputs(exportInventory.getSlots())) ||
-                 !GTTransferUtils.addFluidsToFluidHandler(exportFluids, true, recipe.getFluidOutputs()))) {
+        // We have already trimmed outputs and chanced outputs at this time
+        // Attempt to merge all outputs + chanced outputs into the output bus, to prevent voiding chanced outputs
+        if (!metaTileEntity.canVoidRecipeItemOutputs() && !GTTransferUtils.addItemsToItemHandler(exportInventory, true, recipe.getAllItemOutputs())) {
             this.isOutputsFull = true;
             return false;
         }
+
+        // We have already trimmed fluid outputs at this time
+        if(!metaTileEntity.canVoidRecipeFluidOutputs() && !GTTransferUtils.addFluidsToFluidHandler(exportFluids, true, recipe.getFluidOutputs())) {
+            this.isOutputsFull = true;
+            return false;
+        }
+
         this.isOutputsFull = false;
         return recipe.matches(true, importInventory, importFluids);
     }
@@ -638,22 +630,8 @@ public abstract class AbstractRecipeLogic extends MTETrait implements IWorkable,
         this.progressTime = 1;
         setMaxProgress(resultOverclock[1]);
         this.recipeEUt = resultOverclock[0];
-        this.fluidOutputs = GTUtility.copyFluidList(recipe.getFluidOutputs());
-        if (trimOutputs() && parallelRecipesPerformed == 0) {
-            // if it's a paralelled recipe, the output is already trimmed
-            if (recipe.getOutputs().size() > 0) {
-                this.itemOutputs = GTUtility.copyStackList(recipe.getOutputs().subList(0, 1));
-            } else {
-                this.itemOutputs = GTUtility.copyStackList(recipe.getResultItemOutputs(getOutputInventory().getSlots(), GTUtility.getTierByVoltage(recipeEUt), getRecipeMap())
-                        .stream()
-                        .filter(is ->
-                                ItemStackHashStrategy.comparingAllButCount()
-                                        .equals(is, recipe.getChancedOutputs().get(0).getItemStack()))
-                        .collect(Collectors.toList()));
-            }
-        } else {
-            this.itemOutputs = GTUtility.copyStackList(recipe.getResultItemOutputs(getOutputInventory().getSlots(), GTUtility.getTierByVoltage(recipeEUt), getRecipeMap()));
-        }
+        this.fluidOutputs = GTUtility.copyFluidList(recipe.getAllFluidOutputs(metaTileEntity.getFluidOutputLimit()));
+        this.itemOutputs = GTUtility.copyStackList(recipe.getResultItemOutputs(GTUtility.getTierByVoltage(recipeEUt), getRecipeMap()));
 
         if (this.wasActiveAndNeedsUpdate) {
             this.wasActiveAndNeedsUpdate = false;

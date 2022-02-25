@@ -65,7 +65,7 @@ import java.util.function.Consumer;
 
 import static gregtech.api.capability.GregtechDataCodes.*;
 
-public abstract class MetaTileEntity implements ICoverable {
+public abstract class MetaTileEntity implements ICoverable, IVoidable {
 
     public static final IndexedCuboid6 FULL_CUBE_COLLISION = new IndexedCuboid6(null, Cuboid6.full);
     public static final String TAG_KEY_PAINTING_COLOR = "PaintingColor";
@@ -1011,6 +1011,90 @@ public abstract class MetaTileEntity implements ICoverable {
         blockPos.release();
     }
 
+    protected static void moveInventoryItems(IItemHandler sourceInventory, IItemHandler targetInventory) {
+        for (int srcIndex = 0; srcIndex < sourceInventory.getSlots(); srcIndex++) {
+            ItemStack sourceStack = sourceInventory.extractItem(srcIndex, Integer.MAX_VALUE, true);
+            if (sourceStack.isEmpty()) {
+                continue;
+            }
+            ItemStack remainder = ItemHandlerHelper.insertItemStacked(targetInventory, sourceStack, true);
+            int amountToInsert = sourceStack.getCount() - remainder.getCount();
+            if (amountToInsert > 0) {
+                sourceStack = sourceInventory.extractItem(srcIndex, amountToInsert, false);
+                ItemHandlerHelper.insertItemStacked(targetInventory, sourceStack, false);
+            }
+        }
+    }
+
+    /**
+     * Simulates the insertion of items into a target inventory, then optionally performs the insertion.
+     * <br /><br />
+     * Simulating will not modify any of the input parameters. Insertion will either succeed completely, or fail
+     * without modifying anything.
+     * This method should be called with {@code simulate} {@code true} first, then {@code simulate} {@code false},
+     * only if it returned {@code true}.
+     *
+     * @param handler  the target inventory
+     * @param simulate whether to simulate ({@code true}) or actually perform the insertion ({@code false})
+     * @param items    the items to insert into {@code handler}.
+     * @return {@code true} if the insertion succeeded, {@code false} otherwise.
+     */
+    public static boolean addItemsToItemHandler(final IItemHandler handler,
+                                                final boolean simulate,
+                                                final List<ItemStack> items) {
+        // determine if there is sufficient room to insert all items into the target inventory
+        if (simulate) {
+            OverlayedItemHandler overlayedItemHandler = new OverlayedItemHandler(handler);
+            Map<ItemStackKey, Integer> stackKeyMap = GTHashMaps.fromItemStackCollection(items);
+
+            for (Map.Entry<ItemStackKey, Integer> entry : stackKeyMap.entrySet()) {
+                int amountToInsert = entry.getValue();
+                int amount = overlayedItemHandler.insertStackedItemStackKey(entry.getKey(), amountToInsert);
+                if (amount > 0) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // perform the merge.
+        items.forEach(stack -> ItemHandlerHelper.insertItemStacked(handler, stack, false));
+        return true;
+    }
+
+    /**
+     * Simulates the insertion of fluid into a target fluid handler, then optionally performs the insertion.
+     * <br /><br />
+     * Simulating will not modify any of the input parameters. Insertion will either succeed completely, or fail
+     * without modifying anything.
+     * This method should be called with {@code simulate} {@code true} first, then {@code simulate} {@code false},
+     * only if it returned {@code true}.
+     *
+     * @param fluidHandler the target inventory
+     * @param simulate     whether to simulate ({@code true}) or actually perform the insertion ({@code false})
+     * @param fluidStacks  the items to insert into {@code fluidHandler}.
+     * @return {@code true} if the insertion succeeded, {@code false} otherwise.
+     */
+    public static boolean addFluidsToFluidHandler(IMultipleTankHandler fluidHandler,
+                                                  boolean simulate,
+                                                  List<FluidStack> fluidStacks) {
+        if (simulate) {
+            OverlayedFluidHandler overlayedFluidHandler = new OverlayedFluidHandler(fluidHandler);
+            Map<FluidKey, Integer> fluidKeyMap = GTHashMaps.fromFluidCollection(fluidStacks);
+            for (Map.Entry<FluidKey, Integer> entry : fluidKeyMap.entrySet()) {
+                int amountToInsert = entry.getValue();
+                int inserted = overlayedFluidHandler.insertStackedFluidKey(entry.getKey(), amountToInsert);
+                if (inserted != amountToInsert) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        fluidStacks.forEach(fluidStack -> fluidHandler.fill(fluidStack, true));
+        return true;
+    }
+
     public final int getOutputRedstoneSignal(@Nullable EnumFacing side) {
         if (side == null) {
             return getHighestOutputRedstoneSignal();
@@ -1336,5 +1420,15 @@ public abstract class MetaTileEntity implements ICoverable {
 
     public boolean doTickProfileMessage() {
         return true;
+    }
+
+    @Override
+    public boolean canVoidRecipeItemOutputs() {
+        return false;
+    }
+
+    @Override
+    public boolean canVoidRecipeFluidOutputs() {
+        return false;
     }
 }
