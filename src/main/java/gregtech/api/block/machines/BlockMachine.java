@@ -4,6 +4,7 @@ import codechicken.lib.raytracer.CuboidRayTraceResult;
 import codechicken.lib.raytracer.IndexedCuboid6;
 import codechicken.lib.raytracer.RayTracer;
 import codechicken.lib.vec.Cuboid6;
+import gregtech.api.GTValues;
 import gregtech.api.GregTechAPI;
 import gregtech.api.block.BlockCustomParticle;
 import gregtech.api.block.UnlistedIntegerProperty;
@@ -55,16 +56,14 @@ import net.minecraft.world.World;
 import net.minecraftforge.common.property.ExtendedBlockState;
 import net.minecraftforge.common.property.IExtendedBlockState;
 import net.minecraftforge.common.property.IUnlistedProperty;
+import net.minecraftforge.fml.common.Loader;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 import org.apache.commons.lang3.tuple.Pair;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 import static gregtech.api.util.GTUtility.getMetaTileEntity;
 
@@ -250,6 +249,11 @@ public class BlockMachine extends BlockCustomParticle implements ITileEntityProv
                 metaTileEntity.setFrontFacing(EnumFacing.getDirectionFromEntityLiving(pos, placer));
             } else {
                 metaTileEntity.setFrontFacing(placer.getHorizontalFacing().getOpposite());
+            }
+            if (Loader.isModLoaded(GTValues.MODID_APPENG)) {
+                if (metaTileEntity.getProxy() != null) {
+                    metaTileEntity.getProxy().setOwner((EntityPlayer) placer);
+                }
             }
         }
     }
@@ -491,5 +495,13 @@ public class BlockMachine extends BlockCustomParticle implements ITileEntityProv
             return super.canEntityDestroy(state, world, pos, entity);
         }
         return !((entity instanceof EntityWither || entity instanceof EntityWitherSkull) && metaTileEntity.getWitherProof());
+    }
+
+    @SideOnly(Side.CLIENT)
+    @Override
+    public void randomDisplayTick(@Nonnull IBlockState stateIn, @Nonnull World worldIn, @Nonnull BlockPos pos, @Nonnull Random rand) {
+        super.randomDisplayTick(stateIn, worldIn, pos, rand);
+        MetaTileEntity metaTileEntity = getMetaTileEntity(worldIn, pos);
+        if (metaTileEntity != null) metaTileEntity.randomDisplayTick();
     }
 }
